@@ -11,15 +11,38 @@ from datetime import datetime, timezone, timedelta
 
 TZ = timezone(timedelta(hours=8))
 HA_URL = os.environ.get("HA_MCP_URL", "http://supervisor/core")
-COOLDOWN = int(os.environ.get("COOLDOWN", "600"))  # 10分钟，与HA同步频率一致
+
+def _env_int(key, default):
+    """防御性解析：空字符串或非法值回退默认值，避免容器启动崩溃。"""
+    raw = os.environ.get(key, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(f"WARN: 环境变量 {key}={raw!r} 不是整数，使用默认值 {default}", file=sys.stderr)
+        return default
+
+def _env_float(key, default):
+    """防御性解析：空字符串或非法值回退默认值，避免容器启动崩溃。"""
+    raw = os.environ.get(key, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"WARN: 环境变量 {key}={raw!r} 不是浮点数，使用默认值 {default}", file=sys.stderr)
+        return default
+
+COOLDOWN = _env_int("COOLDOWN", 600)  # 10分钟，与HA同步频率一致
 
 # --- 辣堡身体档案（Add-on 配置可覆盖）---
 # 14岁 | 男 | 99kg | 178cm
 # 体感舒适温度：34-35°C
-TEMP_LOW = float(os.environ.get("TEMP_LOW", "33.0"))        # 低于此=偏低
-TEMP_HIGH = float(os.environ.get("TEMP_HIGH", "37.8"))       # 高于此=发烧
-HR_HIGH = int(os.environ.get("HR_HIGH", "110"))              # 14岁男正常静息心率上限
-HR_LOW = int(os.environ.get("HR_LOW", "55"))                 # 下限
+TEMP_LOW = _env_float("TEMP_LOW", 33.0)          # 低于此=偏低
+TEMP_HIGH = _env_float("TEMP_HIGH", 37.8)        # 高于此=发烧
+HR_HIGH = _env_int("HR_HIGH", 110)               # 14岁男正常静息心率上限
+HR_LOW = _env_int("HR_LOW", 55)                  # 下限
 
 # Alert queue file - fallback only (webhook 直连优先)
 ALERT_FILE = os.environ.get("ALERT_FILE", "/config/ha_alerts.json")
@@ -32,7 +55,7 @@ WATCHDOG_ENABLED = os.environ.get("WATCHDOG_ENABLED", "true").lower() in ("1", "
 # --- 数据文件路径（Add-on 容器内 /config = HA 的配置目录）---
 GPS_DATA_FILE = os.environ.get("GPS_DATA_FILE", "/config/android_gps_app/gps_data.json")
 HEALTH_DATA_FILE = os.environ.get("HEALTH_DATA_FILE", "/config/android_gps_app/health_data.json")
-DATA_STALE_MIN = int(os.environ.get("DATA_STALE_MIN", "15"))  # 超过 N 分钟未更新视为断报
+DATA_STALE_MIN = _env_int("DATA_STALE_MIN", 15)  # 超过 N 分钟未更新视为断报
 
 last_alert_at = {}
 is_home = False  # Track home status

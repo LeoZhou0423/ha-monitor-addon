@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.4
+
+- 修复启动崩溃：config.yaml 增加 `auth_api: true`，允许 `SUPERVISOR_TOKEN` 访问 supervisor API（此前 `bashio::config` 报 `Unable to access the API, forbidden`，全部配置读成空字符串）
+- 加固：环境变量解析改为防御式（空字符串/非法值回退默认值），单个配置项异常不再导致容器崩溃重启
+
 ## 2.0.3
 
 - 修复构建失败：base 镜像 3.23 的 Python 是 PEP 668 externally-managed，`pip3 install aiohttp` 被拒（`externally-managed-environment` 错误）。Dockerfile 增加 `--break-system-packages` 绕过
