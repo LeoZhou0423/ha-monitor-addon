@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.9
+
+- 修复直连模式失效：`HA_DIRECT_TOKEN`/`HA_DIRECT_URL` 需在 `_load_options()`（读取 `/data/options.json`）**之后**读取环境变量，否则 options 尚未注入、token 恒为空 → 直连 WS 仍走魔改网关（Auth failed）
+
 ## 2.0.8
 
 - **修复致命 bug：断报 watchdog 从未运行**。此前 `check_data_freshness()` 任务被埋在 WebSocket 连接成功之后才启动，而本机魔改版 supervisor 的 `/core` 网关代理不可用（WS 无限 `Auth failed`）→ 40 分钟断报告警从未触发。现已将 watchdog 提到 WS 循环**之外独立启动**——它只读本地数据文件 mtime，与 HA 连接完全解耦，WS 连不上也照常告警
