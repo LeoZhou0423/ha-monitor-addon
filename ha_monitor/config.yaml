@@ -29,7 +29,7 @@ options:
   webhook_url: "http://192.168.0.41:8644/webhooks/ha_alerts"
   webhook_secret: "AKxRixstk7D15McUTtte5e41rcYlK9olgxEHYxiHT34"
   watchdog_enabled: true
-  stale_min: 15
+  stale_min: 40
   cooldown: 600
   temp_low: 33.0
   temp_high: 37.8

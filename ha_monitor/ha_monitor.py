@@ -88,7 +88,7 @@ WATCHDOG_ENABLED = os.environ.get("WATCHDOG_ENABLED", "true").lower() in ("1", "
 # --- 数据文件路径（Add-on 容器内 /config = HA 的配置目录）---
 GPS_DATA_FILE = os.environ.get("GPS_DATA_FILE", "/config/android_gps_app/gps_data.json")
 HEALTH_DATA_FILE = os.environ.get("HEALTH_DATA_FILE", "/config/android_gps_app/health_data.json")
-DATA_STALE_MIN = _env_int("DATA_STALE_MIN", 15)  # 超过 N 分钟未更新视为断报
+DATA_STALE_MIN = _env_int("DATA_STALE_MIN", 40)  # 超过 N 分钟未更新视为断报
 
 last_alert_at = {}
 is_home = False  # Track home status
@@ -197,10 +197,12 @@ def write_alert(msg):
 
 
 # --- 数据新鲜度 watchdog ---
-last_stale_alert_at = {}  # key -> ts，防止重复告警
+# 断报告警"只推一次"：推过后记录在 last_stale_alert_at，直到数据全部恢复才重置。
+# 绝不重复打扰 —— 数据持续断报期间不再推送（与全局 COOLDOWN 无关）。
+last_stale_alert_at = {}  # key -> ts，标记已推过
 
 async def check_data_freshness():
-    """周期检查手表数据文件 mtime，超过阈值未更新则告警（只推一次）。
+    """周期检查手表数据文件 mtime，超过阈值未更新则告警（只推一次，恢复前不重复）。
 
     定位/健康两个文件同轮检查合并为一条消息，避免重复打扰。
     """
@@ -208,6 +210,7 @@ async def check_data_freshness():
         try:
             now = datetime.now(TZ).timestamp()
             stale_items = []  # (label, age_min)
+            all_recovered = True
             for label, fpath in (("定位", GPS_DATA_FILE), ("健康", HEALTH_DATA_FILE)):
                 if not os.path.exists(fpath):
                     continue  # 文件不存在不告警（可能是首次部署）
@@ -215,9 +218,17 @@ async def check_data_freshness():
                 age_min = (now - mtime) / 60.0
                 if age_min > DATA_STALE_MIN:
                     stale_items.append((label, age_min))
+                    all_recovered = False
                 else:
-                    last_stale_alert_at.pop(f"stale_{label}", None)  # 数据恢复，重置告警冷却
-            if stale_items and should_alert("stale_all", now):
+                    last_stale_alert_at.pop(f"stale_{label}", None)  # 单项恢复，清理冷却
+            # 数据全部恢复 → 重置"已推过"标记，允许下次断报再次提醒
+            if all_recovered and last_stale_alert_at:
+                last_stale_alert_at.clear()
+                print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] 数据已恢复，重置断报告警状态",
+                      file=sys.stderr)
+            # 有断报且本轮未推过 → 推一次并标记
+            if stale_items and "stale_all" not in last_stale_alert_at:
+                last_stale_alert_at["stale_all"] = now
                 parts = "、".join(f"{label}({age:.0f}分钟)" for label, age in stale_items)
                 msg = (f"【系统提示】手表{parts}数据未更新，可能已断报，请检查手表与网络连接。")
                 print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", file=sys.stderr)
