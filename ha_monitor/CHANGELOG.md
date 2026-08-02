@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.3
+
+- 修复构建失败：base 镜像 3.23 的 Python 是 PEP 668 externally-managed，`pip3 install aiohttp` 被拒（`externally-managed-environment` 错误）。Dockerfile 增加 `--break-system-packages` 绕过
+
 ## 2.0.2
 
 - 修复构建失败（最终版）：Dockerfile 中 `BUILD_FROM` 写死默认值 `ghcr.nju.edu.cn/home-assistant/amd64-base:3.23`，不再依赖 supervisor 注入 build-arg（本魔改版 supervisor 构建命令从不传 `BUILD_FROM`）
