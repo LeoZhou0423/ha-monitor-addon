@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.5
+
+- 修复连接失败：config.yaml 增加 `homeassistant_api: true`，允许经 supervisor 网关访问 HA core（此前 WebSocket 认证 `Auth failed`）
+- 加固配置读取：绕开 bashio（本魔改版 supervisor 的 `bashio::config` 访问 API 恒被 forbidden），改为脚本直接读取 supervisor 挂载的 `/data/options.json`
+
 ## 2.0.4
 
 - 修复启动崩溃：config.yaml 增加 `auth_api: true`，允许 `SUPERVISOR_TOKEN` 访问 supervisor API（此前 `bashio::config` 报 `Unable to access the API, forbidden`，全部配置读成空字符串）

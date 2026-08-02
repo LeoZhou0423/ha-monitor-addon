@@ -1,5 +1,5 @@
 name: "HA Monitor - 辣堡健康位置监控"
-version: "2.0.4"
+version: "2.0.5"
 slug: "ha_monitor"
 description: "监控辣堡手表（Wear OS）健康与位置数据，异常时通过 webhook 直推米糊（Hermes Agent）"
 url: "https://github.com/LeoZhou0423/ha-monitor-addon"
@@ -20,6 +20,8 @@ init: false
 startup: application
 # 允许 SUPERVISOR_TOKEN 访问 supervisor API（bashio::config 读取 options 必需）
 auth_api: true
+# 允许经 supervisor 网关访问 HA core（http://supervisor/core，WebSocket 认证必需）
+homeassistant_api: true
 boot: auto
 map:
   - config:rw

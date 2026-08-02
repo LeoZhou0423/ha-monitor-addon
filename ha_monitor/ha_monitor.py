@@ -12,6 +12,39 @@ from datetime import datetime, timezone, timedelta
 TZ = timezone(timedelta(hours=8))
 HA_URL = os.environ.get("HA_MCP_URL", "http://supervisor/core")
 
+# Add-on options 文件名 -> 环境变量名 映射（options.json 由 supervisor 挂载到 /data）
+_OPTIONS_ENV_MAP = {
+    "webhook_url": "ALERT_WEBHOOK_URL",
+    "webhook_secret": "ALERT_WEBHOOK_SECRET",
+    "watchdog_enabled": "WATCHDOG_ENABLED",
+    "stale_min": "DATA_STALE_MIN",
+    "cooldown": "COOLDOWN",
+    "temp_low": "TEMP_LOW",
+    "temp_high": "TEMP_HIGH",
+    "hr_high": "HR_HIGH",
+    "hr_low": "HR_LOW",
+}
+
+def _load_options():
+    """从 /data/options.json 读取 Add-on 配置并注入环境变量（优先于默认值）。
+
+    bashio 在本魔改版 supervisor 上不可用（API forbidden），
+    supervisor 会把 options 挂载到容器内 /data/options.json，直接读取更可靠。
+    """
+    try:
+        with open("/data/options.json", encoding="utf-8") as f:
+            opts = json.load(f)
+        for key, env in _OPTIONS_ENV_MAP.items():
+            if key in opts and opts[key] is not None:
+                os.environ[env] = str(opts[key])
+        print(f"Options loaded from /data/options.json: {len(opts)} keys", file=sys.stderr)
+    except FileNotFoundError:
+        print("WARN: /data/options.json 不存在，使用默认配置（可能非 Add-on 环境）", file=sys.stderr)
+    except Exception as e:
+        print(f"WARN: 读取 /data/options.json 失败: {e}，使用默认配置", file=sys.stderr)
+
+_load_options()
+
 def _env_int(key, default):
     """防御性解析：空字符串或非法值回退默认值，避免容器启动崩溃。"""
     raw = os.environ.get(key, "").strip()
