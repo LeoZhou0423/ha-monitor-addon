@@ -1,4 +1,6 @@
-ARG BUILD_FROM
+# 默认值兜底：本魔改版 supervisor 不注入 BUILD_FROM 时也能构建
+# （该镜像源 ghcr.nju.edu.cn = 南京大学 ghcr 代理，本机已验证可达）
+ARG BUILD_FROM=ghcr.nju.edu.cn/home-assistant/amd64-base:3.23
 FROM $BUILD_FROM
 
 # Python3 + aiohttp（WebSocket 连 HA 用）

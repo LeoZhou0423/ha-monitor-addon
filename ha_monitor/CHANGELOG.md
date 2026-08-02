@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2
+
+- 修复构建失败（最终版）：Dockerfile 中 `BUILD_FROM` 写死默认值 `ghcr.nju.edu.cn/home-assistant/amd64-base:3.23`，不再依赖 supervisor 注入 build-arg（本魔改版 supervisor 构建命令从不传 `BUILD_FROM`）
+
 ## 2.0.1
 
 - 修复构建失败：config.yaml 补充 `build_from`（base 镜像用 ghcr.nju.edu.cn 代理源），supervisor 构建时正确注入 `BUILD_FROM`
