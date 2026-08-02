@@ -200,24 +200,28 @@ def write_alert(msg):
 last_stale_alert_at = {}  # key -> ts，防止重复告警
 
 async def check_data_freshness():
-    """周期检查手表数据文件 mtime，超过阈值未更新则告警（只推一次）。"""
+    """周期检查手表数据文件 mtime，超过阈值未更新则告警（只推一次）。
+
+    定位/健康两个文件同轮检查合并为一条消息，避免重复打扰。
+    """
     while True:
         try:
             now = datetime.now(TZ).timestamp()
+            stale_items = []  # (label, age_min)
             for label, fpath in (("定位", GPS_DATA_FILE), ("健康", HEALTH_DATA_FILE)):
                 if not os.path.exists(fpath):
                     continue  # 文件不存在不告警（可能是首次部署）
                 mtime = os.path.getmtime(fpath)
                 age_min = (now - mtime) / 60.0
-                key = f"stale_{label}"
                 if age_min > DATA_STALE_MIN:
-                    if should_alert(key, now):
-                        msg = (f"【系统提示】手表{label}数据已 {age_min:.0f} 分钟未更新，"
-                               f"可能已断报，请检查手表与网络连接。")
-                        print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", file=sys.stderr)
-                        write_alert(msg)
+                    stale_items.append((label, age_min))
                 else:
-                    last_stale_alert_at.pop(key, None)  # 数据恢复，重置告警冷却
+                    last_stale_alert_at.pop(f"stale_{label}", None)  # 数据恢复，重置告警冷却
+            if stale_items and should_alert("stale_all", now):
+                parts = "、".join(f"{label}({age:.0f}分钟)" for label, age in stale_items)
+                msg = (f"【系统提示】手表{parts}数据未更新，可能已断报，请检查手表与网络连接。")
+                print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", file=sys.stderr)
+                write_alert(msg)
         except Exception as e:
             print(f"Watchdog error: {e}", file=sys.stderr)
         await asyncio.sleep(60)  # 每分钟检查一次

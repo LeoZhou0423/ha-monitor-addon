@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.6
+
+- 修复重复告警：watchdog 同一轮检查把「定位」「健康」各推一条 → 合并为一条消息（如「手表定位(2546分钟)、健康(2546分钟)数据未更新」）
+
 ## 2.0.5
 
 - 修复连接失败：config.yaml 增加 `homeassistant_api: true`，允许经 supervisor 网关访问 HA core（此前 WebSocket 认证 `Auth failed`）
