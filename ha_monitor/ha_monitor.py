@@ -12,13 +12,6 @@ from datetime import datetime, timezone, timedelta
 TZ = timezone(timedelta(hours=8))
 HA_URL = os.environ.get("HA_MCP_URL", "http://supervisor/core")
 
-# 直连 core（绕过 supervisor 网关代理）：
-#   HA_DIRECT_URL   - 直连 WebSocket 地址，如 ws://homeassistant:8123/api/websocket
-#   HA_DIRECT_TOKEN - 直连用的长期访问令牌（Long-Lived Access Token，在 HA 用户资料页创建）
-# 当魔改版 supervisor 的 /core 网关代理不可用时（本机即如此），可配置直连绕过。
-HA_DIRECT_URL = os.environ.get("HA_DIRECT_URL", "ws://homeassistant:8123/api/websocket")
-HA_DIRECT_TOKEN = os.environ.get("HA_DIRECT_TOKEN", "").strip()
-
 # Add-on options 文件名 -> 环境变量名 映射（options.json 由 supervisor 挂载到 /data）
 _OPTIONS_ENV_MAP = {
     "webhook_url": "ALERT_WEBHOOK_URL",
@@ -53,6 +46,14 @@ def _load_options():
         print(f"WARN: 读取 /data/options.json 失败: {e}，使用默认配置", file=sys.stderr)
 
 _load_options()
+
+# 直连 core（绕过 supervisor 网关代理）：
+#   HA_DIRECT_URL   - 直连 WebSocket 地址，如 ws://homeassistant:8123/api/websocket
+#   HA_DIRECT_TOKEN - 直连用的长期访问令牌（Long-Lived Access Token，在 HA 用户资料页创建）
+# 当魔改版 supervisor 的 /core 网关代理不可用时（本机即如此），可配置直连绕过。
+# 注意：必须在 _load_options() 之后读取环境变量，否则 options 尚未注入。
+HA_DIRECT_URL = os.environ.get("HA_DIRECT_URL", "ws://homeassistant:8123/api/websocket")
+HA_DIRECT_TOKEN = os.environ.get("HA_DIRECT_TOKEN", "").strip()
 
 def _env_int(key, default):
     """防御性解析：空字符串或非法值回退默认值，避免容器启动崩溃。"""
