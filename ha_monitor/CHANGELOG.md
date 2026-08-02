@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- 修复构建失败：config.yaml 补充 `build_from`（base 镜像用 ghcr.nju.edu.cn 代理源），supervisor 构建时正确注入 `BUILD_FROM`
+
 ## 2.0.0
 
 - 重构为 HAOS Add-on（替代原 core-ssh 独立脚本）

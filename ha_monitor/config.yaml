@@ -1,5 +1,5 @@
 name: "HA Monitor - 辣堡健康位置监控"
-version: "2.0.0"
+version: "2.0.1"
 slug: "ha_monitor"
 description: "监控辣堡手表（Wear OS）健康与位置数据，异常时通过 webhook 直推米糊（Hermes Agent）"
 url: "https://github.com/LeoZhou0423/ha-monitor-addon"
@@ -9,6 +9,13 @@ arch:
   - armhf
   - armv7
   - i386
+# base 镜像使用该系统可达的镜像源（ghcr.nju.edu.cn = 南京大学 ghcr 代理）
+build_from:
+  aarch64: "ghcr.nju.edu.cn/home-assistant/aarch64-base:3.23"
+  amd64: "ghcr.nju.edu.cn/home-assistant/amd64-base:3.23"
+  armhf: "ghcr.nju.edu.cn/home-assistant/armhf-base:3.23"
+  armv7: "ghcr.nju.edu.cn/home-assistant/armv7-base:3.23"
+  i386: "ghcr.nju.edu.cn/home-assistant/i386-base:3.23"
 init: false
 startup: application
 boot: auto
