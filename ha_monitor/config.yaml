@@ -1,0 +1,36 @@
+name: "HA Monitor - 辣堡健康位置监控"
+version: "2.0.0"
+slug: "ha_monitor"
+description: "监控辣堡手表（Wear OS）健康与位置数据，异常时通过 webhook 直推米糊（Hermes Agent）"
+url: "https://github.com/LeoZhou0423/ha-monitor-addon"
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+init: false
+startup: application
+boot: auto
+map:
+  - config:rw
+options:
+  webhook_url: "http://192.168.0.41:8644/webhooks/ha_alerts"
+  webhook_secret: "AKxRixstk7D15McUTtte5e41rcYlK9olgxEHYxiHT34"
+  watchdog_enabled: true
+  stale_min: 15
+  cooldown: 600
+  temp_low: 33.0
+  temp_high: 37.8
+  hr_high: 110
+  hr_low: 55
+schema:
+  webhook_url: str
+  webhook_secret: str
+  watchdog_enabled: bool
+  stale_min: int
+  cooldown: int
+  temp_low: float
+  temp_high: float
+  hr_high: int
+  hr_low: int
