@@ -1,5 +1,5 @@
 name: "HA Monitor - 辣堡健康位置监控"
-version: "2.0.6"
+version: "2.0.8"
 slug: "ha_monitor"
 description: "监控辣堡手表（Wear OS）健康与位置数据，异常时通过 webhook 直推米糊（Hermes Agent）"
 url: "https://github.com/LeoZhou0423/ha-monitor-addon"
@@ -35,6 +35,8 @@ options:
   temp_high: 37.8
   hr_high: 110
   hr_low: 55
+  ha_direct_url: "ws://homeassistant:8123/api/websocket"
+  ha_direct_token: ""
 schema:
   webhook_url: str
   webhook_secret: str
@@ -45,3 +47,5 @@ schema:
   temp_high: float
   hr_high: int
   hr_low: int
+  ha_direct_url: str
+  ha_direct_token: str

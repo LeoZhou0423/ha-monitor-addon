@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.8
+
+- **修复致命 bug：断报 watchdog 从未运行**。此前 `check_data_freshness()` 任务被埋在 WebSocket 连接成功之后才启动，而本机魔改版 supervisor 的 `/core` 网关代理不可用（WS 无限 `Auth failed`）→ 40 分钟断报告警从未触发。现已将 watchdog 提到 WS 循环**之外独立启动**——它只读本地数据文件 mtime，与 HA 连接完全解耦，WS 连不上也照常告警
+- **修复 WS URL 路径**：`ws://supervisor/core/api/websocket` → `ws://supervisor/core/websocket`（官方标准路径，去掉多余的 `/api/`）
+- **新增直连模式**：配置 `ha_direct_token`（HA 长期访问令牌）+ `ha_direct_url`（如 `ws://homeassistant:8123/api/websocket`）可绕过 supervisor 网关直连 core，魔改版 supervisor 下事件告警（体温/心率/心情/出门）也能恢复
+- **修复版本号**：此前 v2.0.7 忘记在 config.yaml bump version（仍为 2.0.6），导致附加组件商店识别不到更新（`update_available=false`）。本次 version → 2.0.8
+
 ## 2.0.7
 
 - 断报容错升级：数据超过阈值未更新只推送**一次**，数据恢复前**绝不重复打扰**（修复此前每 10 分钟重复推送的 bug）

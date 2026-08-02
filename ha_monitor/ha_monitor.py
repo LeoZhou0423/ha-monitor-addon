@@ -12,6 +12,13 @@ from datetime import datetime, timezone, timedelta
 TZ = timezone(timedelta(hours=8))
 HA_URL = os.environ.get("HA_MCP_URL", "http://supervisor/core")
 
+# 直连 core（绕过 supervisor 网关代理）：
+#   HA_DIRECT_URL   - 直连 WebSocket 地址，如 ws://homeassistant:8123/api/websocket
+#   HA_DIRECT_TOKEN - 直连用的长期访问令牌（Long-Lived Access Token，在 HA 用户资料页创建）
+# 当魔改版 supervisor 的 /core 网关代理不可用时（本机即如此），可配置直连绕过。
+HA_DIRECT_URL = os.environ.get("HA_DIRECT_URL", "ws://homeassistant:8123/api/websocket")
+HA_DIRECT_TOKEN = os.environ.get("HA_DIRECT_TOKEN", "").strip()
+
 # Add-on options 文件名 -> 环境变量名 映射（options.json 由 supervisor 挂载到 /data）
 _OPTIONS_ENV_MAP = {
     "webhook_url": "ALERT_WEBHOOK_URL",
@@ -23,6 +30,8 @@ _OPTIONS_ENV_MAP = {
     "temp_high": "TEMP_HIGH",
     "hr_high": "HR_HIGH",
     "hr_low": "HR_LOW",
+    "ha_direct_token": "HA_DIRECT_TOKEN",
+    "ha_direct_url": "HA_DIRECT_URL",
 }
 
 def _load_options():
@@ -245,25 +254,38 @@ def is_relevant(eid):
                                  "mood", "心情", "ti_wen", "xin_lu"])
 
 async def main():
+    # 数据新鲜度 watchdog 独立于 WebSocket 启动：
+    # 即使 WS 认证失败（如魔改版 supervisor 网关代理不可用），
+    # 断报告警（40 分钟未更新）依然工作——它只读本地数据文件 mtime。
+    if WATCHDOG_ENABLED and "watchdog_task" not in globals():
+        globals()["watchdog_task"] = asyncio.create_task(check_data_freshness())
+        print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] Watchdog started (independent of WS)",
+              file=sys.stderr)
+
     token = get_token()
     if not token:
         print("No HA token", file=sys.stderr)
-        return
-    print(f"Token OK, len={len(token)}", file=sys.stderr)
+        # 无 token 时 watchdog 依然运行（它是独立任务），直接挂起避免退出
+        await asyncio.Event().wait()
 
-    ws_url = HA_URL.replace("http://", "ws://").replace("https://", "wss://") + "/api/websocket"
+    # 直连模式：配置了 HA_DIRECT_TOKEN 时，绕过 supervisor 网关直接连 core。
+    if HA_DIRECT_TOKEN:
+        ws_url = HA_DIRECT_URL
+        print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] Direct WS mode: {ws_url}",
+              file=sys.stderr)
+    else:
+        # 标准路径：ws://supervisor/core/websocket（注意不是 /api/websocket）
+        ws_url = HA_URL.replace("http://", "ws://").replace("https://", "wss://") + "/websocket"
+    print(f"Token OK, len={len(token)}", file=sys.stderr)
 
     try:
         import aiohttp
     except ImportError:
         print("aiohttp not installed", file=sys.stderr)
-        return
+        await asyncio.Event().wait()
 
     while True:
         try:
-            # 启动数据新鲜度 watchdog（只启动一次，幂等；受配置开关控制）
-            if WATCHDOG_ENABLED and "watchdog_task" not in globals():
-                globals()["watchdog_task"] = asyncio.create_task(check_data_freshness())
             async with aiohttp.ClientSession() as session:
                 async with session.ws_connect(ws_url) as ws:
                     msg = await ws.receive_json()
