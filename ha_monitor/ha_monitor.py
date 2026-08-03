@@ -254,6 +254,16 @@ def is_relevant(eid):
                                  "body_temperature", "heart_rate", "device_tracker", "person",
                                  "mood", "心情", "ti_wen", "xin_lu"])
 
+# 无效状态：同步失败/占位时 HA 实体可能进入这些状态，必须忽略，不得触发告警。
+# 例如 device_tracker 从 "home" 变成 "unknown" 是数据丢失而非真的出门。
+_INVALID_STATES = {"", "unknown", "unavailable", "none", "null", "nan"}
+
+def _is_valid_state(state):
+    """state 是否有效（非 unknown/unavailable 等占位状态）。"""
+    if not state:
+        return False
+    return state.strip().lower() not in _INVALID_STATES
+
 async def main():
     # 数据新鲜度 watchdog 独立于 WebSocket 启动：
     # 即使 WS 认证失败（如魔改版 supervisor 网关代理不可用），
@@ -336,6 +346,11 @@ async def handle_event(raw_data):
     old = os_.get("state", "") if os_ else ""
     if state == old:
         print(f"[DEBUG] 状态未变化, 跳过", file=sys.stderr)
+        return
+    # 无效状态（unknown/unavailable/空）忽略：同步失败/数据占位不是真实事件，
+    # 例如 device_tracker "home"→"unknown" 是丢数据，绝不能误报"出门了"。
+    if not _is_valid_state(state):
+        print(f"[DEBUG] 无效状态 {state!r}, 忽略 (old={old!r})", file=sys.stderr)
         return
     attrs = ns.get("attributes", {})
     alerts = []

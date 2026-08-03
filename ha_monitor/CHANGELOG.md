@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0
+
+- **修复 unknown 状态误报**：当手表同步失败上报空值/unknown 时，不再触发"出门了"等虚假告警
+  - 事件层：`state` 为 `unknown`/`unavailable`/`none`/空 等无效状态时直接忽略，不进入任何告警逻辑（此前 `device_tracker` 从 `home` → `unknown` 会被误判为"辣堡出门了"）
+  - 配套写入端修复见 custom_components（`api.py` 对无效值保留旧数据，见仓库 AndroidGpsApp）
+
 ## 2.0.9
 
 - 修复直连模式失效：`HA_DIRECT_TOKEN`/`HA_DIRECT_URL` 需在 `_load_options()`（读取 `/data/options.json`）**之后**读取环境变量，否则 options 尚未注入、token 恒为空 → 直连 WS 仍走魔改网关（Auth failed）
