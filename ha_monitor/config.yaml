@@ -1,5 +1,5 @@
 name: "HA Monitor - 辣堡健康位置监控"
-version: "2.1.0"
+version: "2.1.1"
 slug: "ha_monitor"
 description: "监控辣堡手表（Wear OS）健康与位置数据，异常时通过 webhook 直推米糊（Hermes Agent）"
 url: "https://github.com/LeoZhou0423/ha-monitor-addon"

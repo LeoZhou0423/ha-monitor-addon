@@ -399,8 +399,7 @@ async def handle_event(raw_data):
                 alerts.append("【系统提示】辣堡出门了，请查询杭州天气并关心他的安全，问他去哪。但不要提到有关\"系统\"、\"HA\"等字眼")
                 print(f"[DEBUG] 生成系统提示: 辣堡出门了 (从 {old} -> {state})", file=sys.stderr)
             elif now_home and should_alert(f"loc_home_{eid}", now):
-                home_name = state if _is_home_state(state) else "家"
-                alerts.append(f"【系统提示】辣堡到{home_name}了，欢迎他回家，问他累不累。但不要提到有关\"系统\"、\"HA\"等字眼")
+                alerts.append("【系统提示】辣堡到家了，欢迎他回家，问他累不累。但不要提到有关\"系统\"、\"HA\"等字眼")
                 print(f"[DEBUG] 生成系统提示: 辣堡到家了 ({state})", file=sys.stderr)
 
     for a in alerts:
