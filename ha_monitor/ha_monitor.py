@@ -103,6 +103,11 @@ DATA_STALE_MIN = _env_int("DATA_STALE_MIN", 40)  # 超过 N 分钟未更新视�
 last_alert_at = {}
 is_home = False  # Track home status
 
+# WS 重连抑制：core 重启后 HA 会批量重推实体快照，连接建立后前 N 秒忽略所有事件，
+# 防止把"恢复流"误判成真实到家/出门/异常，连发多条假告警。
+RE_CONNECT_SUPPRESS = _env_int("RE_CONNECT_SUPPRESS", 30)
+_reconnect_at = 0.0  # 最近一次 WS 成功连接的时间戳（epoch 秒）
+
 # 家的状态集合：默认 "home" + 所有非 passive 的 HA zone 名（支持多套房子）。
 # 从 /config/.storage/zone 动态读取，新增/删除 zone 无需改脚本。
 HOME_STATES = {"home"}
@@ -316,6 +321,10 @@ async def main():
                     now_str = datetime.now(TZ).strftime("%H:%M:%S")
                     print(f"[{now_str}] HA Monitor connected (startup alert suppressed).", file=sys.stderr)
                     # 启动成功不推 webhook：凌晨重启会以"关心"名义打扰用户，且非异常无需告警
+                    # 重连抑制窗口：core 重启后 HA 会批量重推全部实体快照，
+                    # 若在窗口内把这些快照当真实事件，会连发一堆"到家/出门/心跳"假告警。
+                    global _reconnect_at
+                    _reconnect_at = datetime.now(TZ).timestamp()
 
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
@@ -328,7 +337,7 @@ async def main():
             await asyncio.sleep(15)
 
 async def handle_event(raw_data):
-    global is_home
+    global is_home, _reconnect_at
     try:
         msg = json.loads(raw_data)
     except: return
@@ -339,9 +348,25 @@ async def handle_event(raw_data):
     ns = data.get("new_state", {})
     os_ = data.get("old_state", {})
     if not eid or not ns or not is_relevant(eid): return
+    now = datetime.now(TZ).timestamp()
+
+    # ── 快照事件检测 ──────────────────────────────────────────────
+    # WS 重连后 HA 会把全部实体当前状态作为 state_changed 推送，
+    # 其特征是 old_state 为 null（无旧值可比）。真实变化一定有旧值。
+    # 快照事件不是真实变化，绝不当"到家/出门/异常"处理。
+    if not os_ or not isinstance(os_, dict):
+        print(f"[DEBUG] 快照事件(无旧状态), 跳过: {eid} → {ns.get('state','')}", file=sys.stderr)
+        return
+
+    # ── 重连抑制窗口 ──────────────────────────────────────────────
+    # 连接刚建立的前 RE_CONNECT_SUPPRESS 秒内，忽略所有事件：
+    # 保护 core 重启瞬间叠加的批量事件（即使带旧值也多为恢复流）。
+    if now - _reconnect_at < RE_CONNECT_SUPPRESS:
+        print(f"[DEBUG] 重连抑制窗口内({int(now-_reconnect_at)}s), 忽略: {eid}", file=sys.stderr)
+        return
+
     print(f"[DEBUG] 相关实体变化: {eid}", file=sys.stderr)
 
-    now = datetime.now(TZ).timestamp()
     state = ns.get("state", "")
     old = os_.get("state", "") if os_ else ""
     if state == old:
@@ -395,10 +420,12 @@ async def handle_event(raw_data):
         now_home = _is_home_state(state)
         if old != state and was_home != now_home:
             is_home = now_home
-            if not now_home and should_alert(f"loc_out_{eid}", now):
+            # 全局 cooldown key（不带 eid）：core 重启/多 tracker 同时恢复时
+            # 只发一条，避免"到家了"连发多遍。
+            if not now_home and should_alert("loc_out", now):
                 alerts.append("【系统提示】辣堡出门了，请查询杭州天气并关心他的安全，问他去哪。但不要提到有关\"系统\"、\"HA\"等字眼")
                 print(f"[DEBUG] 生成系统提示: 辣堡出门了 (从 {old} -> {state})", file=sys.stderr)
-            elif now_home and should_alert(f"loc_home_{eid}", now):
+            elif now_home and should_alert("loc_home", now):
                 alerts.append("【系统提示】辣堡到家了，欢迎他回家，问他累不累。但不要提到有关\"系统\"、\"HA\"等字眼")
                 print(f"[DEBUG] 生成系统提示: 辣堡到家了 ({state})", file=sys.stderr)
 
