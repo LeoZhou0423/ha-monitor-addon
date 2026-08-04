@@ -1,15 +1,15 @@
 {
   "domain": "ha_monitor",
   "name": "HA Monitor - 辣堡健康位置监控",
-  "codeowners": ["@spicyburger"],
+  "codeowners": ["@LeoZhou0423"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/spicyburger/ha-monitor",
-  "issue_tracker": "https://github.com/spicyburger/ha-monitor/issues",
+  "documentation": "https://github.com/LeoZhou0423/ha-monitor-addon",
+  "issue_tracker": "https://github.com/LeoZhou0423/ha-monitor-addon/issues",
   "integration_type": "service",
   "iot_class": "local_push",
   "requirements": [],
-  "version": "2.0.0",
+  "version": "2.1.0",
   "loggers": ["custom_components.ha_monitor"],
   "hacs": {
     "integration": true
