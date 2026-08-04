@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "设置 HA Monitor",
+        "description": "配置健康监控参数",
+        "data": {
+          "name": "名称",
+          "entities": "监控的实体",
+          "temp_low": "体温偏低阈值 (°C)",
+          "temp_high": "体温偏高阈值 (°C)",
+          "hr_high": "心率过快阈值 (bpm)",
+          "hr_low": "心率偏低阈值 (bpm)",
+          "alerts_file": "告警文件路径",
+          "cooldown": "冷却时间 (秒)"
+        }
+      }
+    },
+    "error": {
+      "unknown": "发生未知错误"
+    },
+    "abort": {
+      "already_configured": "该设备已配置"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA Monitor 选项",
+        "data": {
+          "entities": "监控的实体",
+          "temp_low": "体温偏低阈值 (°C)",
+          "temp_high": "体温偏高阈值 (°C)",
+          "hr_high": "心率过快阈值 (bpm)",
+          "hr_low": "心率偏低阈值 (bpm)",
+          "alerts_file": "告警文件路径",
+          "cooldown": "冷却时间 (秒)"
+        }
+      }
+    }
+  }
+}
