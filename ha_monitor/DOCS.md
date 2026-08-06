@@ -15,13 +15,14 @@
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| webhook_url | http://192.168.0.41:8644/webhooks/ha_alerts | 米糊 webhook 地址 |
-| webhook_secret | (已填) | HMAC 签名密钥 |
+| webhook_url | (空，必填) | 米糊 webhook 地址 |
+| webhook_secret | (空，必填) | HMAC 签名密钥 |
 | watchdog_enabled | true | 数据断报监控开关 |
-| stale_min | 15 | 断报阈值（分钟） |
+| stale_min | 300 | 断报阈值（分钟） |
 | cooldown | 600 | 告警冷却（秒） |
 | temp_low / temp_high | 33.0 / 37.8 | 体温阈值 |
 | hr_low / hr_high | 55 / 110 | 心率阈值 |
+| alert_interval_min / max | 45 / 120 | 多条告警的随机发送间隔（秒） |
 
 ## 日志
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.6
+
+- **修复日落时间解析崩溃**：`sensor.ri_luo_shi_jian` 在 sunsetbot API 无当日数据时返回占位符 `-`，直接 `datetime.fromisoformat('-')` 抛错并每分钟刷屏。`_parse_sunset_time` 现将纯占位符（`-`/`--` 等）视为无效静默跳过，不触发晚霞提醒
+- 版本号同步至 2.1.6（此前 2.1.5 已含直连认证与拟真策略）
+
+## 2.1.5
+
+- **拟真策略**：体温/心率告警触发后 50 分钟智能冷却（状态恢复时清零）；多条告警间隔 45-120 秒随机发送（`alert_interval_min` / `alert_interval_max` 可配）；第二条消息加"另外，"，第三条加"还有，"避免机械感
+- **告警消息风格重写**：全部消息改为吐槽式/建议式口语，去掉【系统提示】前缀和"请关心他/但不要提到技术细节"等指令式废话；措辞铁律：home/世纪新筑统一"到家了"
+
+## 2.1.4
+
+- **直连认证修复 401**：优先使用 `HA_DIRECT_TOKEN`（长期访问令牌）直连 HA Core（`ws://homeassistant:8123/api/websocket`），绕过 supervisor 网关的 `Auth failed`；未配置时回退 SUPERVISOR_TOKEN
+
 ## 2.1.2
 
 - **修复"到家了"连发多遍**（core 重启/WS 重连风暴导致）：三层防护
