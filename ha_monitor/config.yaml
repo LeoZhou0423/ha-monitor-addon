@@ -1,5 +1,5 @@
 name: "HA Monitor - 辣堡健康位置监控"
-version: "2.1.6"
+version: "2.1.7"
 slug: "ha_monitor"
 description: "监控辣堡手表（Wear OS）健康与位置数据，异常时通过 webhook 直推米糊（Hermes Agent）"
 url: "https://github.com/LeoZhou0423/ha-monitor-addon"
@@ -9,7 +9,6 @@ arch:
   - armhf
   - armv7
   - i386
-# base 镜像使用该系统可达的镜像源（ghcr.nju.edu.cn = 南京大学 ghcr 代理）
 build_from:
   aarch64: "ghcr.nju.edu.cn/home-assistant/aarch64-base:3.23"
   amd64: "ghcr.nju.edu.cn/home-assistant/amd64-base:3.23"
@@ -18,16 +17,14 @@ build_from:
   i386: "ghcr.nju.edu.cn/home-assistant/i386-base:3.23"
 init: false
 startup: application
-# 允许 SUPERVISOR_TOKEN 访问 supervisor API（bashio::config 读取 options 必需）
 auth_api: true
-# 允许经 supervisor 网关访问 HA core（http://supervisor/core，WebSocket 认证必需）
 homeassistant_api: true
 boot: auto
 map:
   - config:rw
 options:
-  webhook_url: ""
-  webhook_secret: ""
+  webhook_url: "http://192.168.0.41:8644/webhooks/ha_alerts"
+  webhook_secret: "AKxRixstk7D15McUTtte5e41rcYlK9olgxEHYxiHT34"
   watchdog_enabled: true
   stale_min: 300
   cooldown: 600
@@ -39,6 +36,7 @@ options:
   ha_direct_token: ""
   alert_interval_min: 45
   alert_interval_max: 120
+  burst_gap_min: 5
 schema:
   webhook_url: str
   webhook_secret: str
@@ -53,3 +51,4 @@ schema:
   ha_direct_token: str
   alert_interval_min: int
   alert_interval_max: int
+  burst_gap_min: int

@@ -78,8 +78,11 @@ HR_LOW = _env_int("HR_LOW", 55)
 ALERT_INTERVAL_MIN = _env_int("ALERT_INTERVAL_MIN", 45)
 ALERT_INTERVAL_MAX = _env_int("ALERT_INTERVAL_MAX", 120)
 
+# burst 上下文窗口：超过该时间无消息则重置衔接计数（分钟）
+BURST_GAP_MIN = _env_int("BURST_GAP_MIN", 5)
+
 ALERT_FILE = os.environ.get("ALERT_FILE", "/config/ha_alerts.json")
-WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL", "")
+WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL", "http://192.168.0.41:8644/webhooks/ha_alerts")
 WEBHOOK_SECRET = os.environ.get("ALERT_WEBHOOK_SECRET", "")
 WATCHDOG_ENABLED = os.environ.get("WATCHDOG_ENABLED", "true").lower() in ("1", "true", "yes", "on")
 
@@ -87,13 +90,13 @@ GPS_DATA_FILE = os.environ.get("GPS_DATA_FILE", "/config/android_gps_app/gps_dat
 HEALTH_DATA_FILE = os.environ.get("HEALTH_DATA_FILE", "/config/android_gps_app/health_data.json")
 DATA_STALE_MIN = _env_int("DATA_STALE_MIN", 300)
 
-# === 智能冷却机制 ===
-# 记录每种告警的触发时间
-last_alert_at = {}
-# 记录每种告警上次正常状态的时间（用于清零计时器）
-last_normal_at = {}
-# 全局告警计数（用于上下文衔接）
-alert_count = 0
+# === 状态锁机制 ===
+# 同一异常只提醒一次，直到状态恢复正常才解锁
+_alert_lock = {}
+
+# burst 上下文：记录最近一次发送时间 + 本次 burst 内已发条数
+_last_alert_ts = 0
+_burst_count = 0
 
 is_home = False
 RE_CONNECT_SUPPRESS = _env_int("RE_CONNECT_SUPPRESS", 30)
@@ -207,69 +210,87 @@ def write_alert(msg):
     except Exception as e:
         print(f"Write alert error: {e}", file=sys.stderr)
 
-# === 智能冷却：带"正常时清零"的防连续触发 ===
-def should_alert_smart(key, now, value=None, normal_range=None):
-    """
-    智能冷却检查：
-    1. 如果状态恢复正常（value在normal_range内），清零计时器
-    2. 否则检查是否在冷却期内（50分钟）
-    
-    Args:
-        key: 告警类型标识
-        now: 当前时间戳
-        value: 当前值（可选，用于检测正常状态）
-        normal_range: 正常范围元组 (low, high)，如 (TEMP_LOW, TEMP_HIGH)
-    
-    Returns:
-        bool: 是否应该触发告警
-    """
-    # 如果提供了值和正常范围，检查是否恢复正常
-    if value is not None and normal_range is not None:
-        low, high = normal_range
-        if low < value < high:
-            # 状态正常，清零计时器
-            last_normal_at[key] = now
-            return False
-    
-    # 检查冷却（50分钟）
-    last_alert = last_alert_at.get(key, 0)
-    last_normal = last_normal_at.get(key, 0)
-    
-    # 如果上次告警后恢复正常，从正常时刻重新计时（已清零）
-    if last_normal > last_alert:
-        # 正常过，重置冷却
-        last_alert_at.pop(key, None)
-        last_alert = 0
-    
-    # 冷却期：50分钟
-    if last_alert + 50*60 > now:
-        return False
-    
-    # 允许触发
-    last_alert_at[key] = now
-    return True
+# === 状态锁工具函数 ===
+def is_locked(key):
+    return _alert_lock.get(key, False)
 
-# === 通用冷却（用于心情、位置等无数值的告警） ===
-def should_alert(key, now):
-    if last_alert_at.get(key, 0) + COOLDOWN > now:
-        return False
-    last_alert_at[key] = now
-    return True
 
-# === 拟真：上下文衔接 ===
+def lock(key):
+    _alert_lock[key] = True
+
+
+def unlock(key):
+    _alert_lock.pop(key, None)
+
+
+# === 文案池：同类告警用不同措辞，避免机械重复 ===
+_MESSAGE_TEMPLATES = {
+    "temp_high": [
+        "辣堡体温{t}°C，有点烧。让他歇会儿，别一直催他。",
+        "体温{t}°C，辣堡怕不是着凉了/捂热了。随口问一句就行。",
+    ],
+    "temp_low": [
+        "辣堡体温{t}°C，有点低。用嫌弃包装关心，提一句就行，别念叨。",
+        "体温{t}°C，辣堡是不是穿少了？嫌弃地提醒一下。",
+    ],
+    "hr_high": [
+        "辣堡心率{hr}，有点快。随口问他干嘛了，别一副紧张样。",
+        "心率{hr}，辣堡刚运动完还是咋的？顺嘴问一句。",
+    ],
+    "hr_low": [
+        "辣堡心率{hr}，偏慢。问一句是不是没睡好。",
+        "心率{hr}，辣堡是不是在睡觉？别大惊小怪，提一句。",
+    ],
+    "stale": [
+        "辣堡手表{parts}数据好久没更新了，可能断连。让他看一眼手表，别反复说。",
+        "手表{parts}没动静了，辣堡是不是没开 APP？提醒一次就行。",
+    ],
+    "mood_bad_home": [
+        "辣堡心情不好，人在家。放首轻快的歌，别追问。",
+        "他情绪不太对，在家。挑首歌缓缓气氛，别去审他。",
+    ],
+    "mood_bad": [
+        "辣堡心情不好。别刨根问底，陪他聊两句。",
+        "他今天不太开心，有空随口问一句，别讲大道理。",
+    ],
+    "loc_out": [
+        "辣堡出门了。查下天气，顺嘴提醒一句，别啰嗦。",
+        "他出去了。瞄一眼要不要带伞/添衣，轻点提醒。",
+    ],
+    "loc_home": [
+        "辣堡到家了。问一句累不累，别太热情。",
+        "他回来了。随口说句回来了就行，别围着他转。",
+    ],
+}
+
+
+def message_for(key, **kwargs):
+    """按 key 随机返回一条文案并格式化。"""
+    templates = _MESSAGE_TEMPLATES.get(key, [])
+    if not templates:
+        return ""
+    return random.choice(templates).format(**kwargs)
+
+
+# === 拟真：上下文衔接（burst 模式） ===
 def add_context_prefix(msg):
-    """根据已发送消息数量，添加衔接语，避免机械感（SOUL.md 已读乱回风格）。"""
-    global alert_count
-    alert_count += 1
-    if alert_count == 1:
-        # 第一条消息，不加前缀
+    """
+    只有在短时间内连续发送的消息才加衔接语。
+    超过 BURST_GAP_MIN 则视为新会话，避免隔很久还来一句"还有"。
+    """
+    global _last_alert_ts, _burst_count
+    now = datetime.now(TZ).timestamp()
+    gap = BURST_GAP_MIN * 60
+    if now - _last_alert_ts > gap:
+        _burst_count = 0
+    _burst_count += 1
+    _last_alert_ts = now
+    if _burst_count == 1:
         return msg
-    elif alert_count == 2:
-        # 第二条，加上"另外"
+    if _burst_count == 2:
         return f"另外，{msg}"
-    else:
-        # 第三条及以后，加上"还有"
-        return f"还有，{msg}"
+    return f"还有，{msg}"
+
 
 # === 拟真：后台任务，队列消费 + 时序间隔 ===
 async def alert_sender():
@@ -304,15 +325,13 @@ def queue_alert(msg):
     except Exception as e:
         print(f"Queue error: {e}", file=sys.stderr)
 
-# === 数据新鲜度 watchdog ===
-last_stale_alert_at = {}
-
+# === 数据新鲜度 watchdog（状态锁模式） ===
 async def check_data_freshness():
     while True:
         try:
             now = datetime.now(TZ).timestamp()
             stale_items = []
-            all_recovered = True
+            any_recovered = False
             for label, fpath in (("定位", GPS_DATA_FILE), ("健康", HEALTH_DATA_FILE)):
                 if not os.path.exists(fpath):
                     continue
@@ -320,19 +339,23 @@ async def check_data_freshness():
                 age_min = (now - mtime) / 60.0
                 if age_min > DATA_STALE_MIN:
                     stale_items.append((label, age_min))
-                    all_recovered = False
                 else:
-                    last_stale_alert_at.pop(f"stale_{label}", None)
-            if all_recovered and last_stale_alert_at:
-                last_stale_alert_at.clear()
-                print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] 数据已恢复，重置断报告警状态",
+                    if is_locked(f"stale_{label}"):
+                        any_recovered = True
+                        unlock(f"stale_{label}")
+            # 只要有一个从 stale 恢复，也重置总锁，允许下次整体断连时再报
+            if any_recovered and is_locked("stale_all"):
+                unlock("stale_all")
+                print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] 手表数据恢复，重置断连提醒锁",
                       file=sys.stderr)
-            if stale_items and "stale_all" not in last_stale_alert_at:
-                last_stale_alert_at["stale_all"] = now
+            if stale_items and not is_locked("stale_all"):
+                lock("stale_all")
+                for label, _ in stale_items:
+                    lock(f"stale_{label}")
                 parts = "、".join(f"{label}({age:.0f}分钟)" for label, age in stale_items)
-                msg = (f"辣堡手表{parts}数据好一阵没更新，可能断连了。提一嘴让他看下手表，别念叨。")
+                msg = message_for("stale", parts=parts)
                 print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", file=sys.stderr)
-                write_alert(msg)
+                queue_alert(msg)
         except Exception as e:
             print(f"Watchdog error: {e}", file=sys.stderr)
         await asyncio.sleep(60)
@@ -537,46 +560,68 @@ async def handle_event(raw_data):
     ts = datetime.now(TZ).strftime('%H:%M:%S')
     print(f"[{ts}] {eid}: {old} → {state}", file=sys.stderr)
 
-    # === 体温：智能冷却（50分钟 + 正常时清零） ===
+    # === 体温：状态锁（异常一次 + 恢复正常解锁） ===
     if "temperature" in eid.lower() or "体温" in eid or "ti_wen" in eid:
         try:
             t = float(state)
-            if should_alert_smart("temp_high", now, t, (TEMP_LOW, TEMP_HIGH)):
-                queue_alert(f"辣堡发烧了，体温{t}°C。让他休息，嫌弃两句可以，别凶他。")
-            elif should_alert_smart("temp_low", now, t, (TEMP_LOW, TEMP_HIGH)):
-                queue_alert(f"辣堡体温{t}°C，有点低。用嫌弃包装关心，提一句就行，别念叨。")
+            if TEMP_LOW < t < TEMP_HIGH:
+                # 恢复正常，解锁
+                unlock("temp_high")
+                unlock("temp_low")
+            elif t >= TEMP_HIGH and not is_locked("temp_high"):
+                lock("temp_high")
+                unlock("temp_low")
+                queue_alert(message_for("temp_high", t=t))
+            elif t <= TEMP_LOW and not is_locked("temp_low"):
+                lock("temp_low")
+                unlock("temp_high")
+                queue_alert(message_for("temp_low", t=t))
         except:
             pass
 
-    # === 心率：智能冷却 ===
+    # === 心率：状态锁 ===
     elif "heart" in eid.lower() or "心率" in eid or "xin_lu" in eid:
         try:
             hr = float(state)
-            if should_alert_smart("hr_high", now, hr, (HR_LOW, HR_HIGH)):
-                queue_alert(f"辣堡心率{int(hr)}，有点快。随口问他干嘛了，别一副紧张样。")
-            elif should_alert_smart("hr_low", now, hr, (HR_LOW, HR_HIGH)):
-                queue_alert(f"辣堡心率{int(hr)}，偏慢。问一句是不是没睡好。")
+            if HR_LOW < hr < HR_HIGH:
+                unlock("hr_high")
+                unlock("hr_low")
+            elif hr >= HR_HIGH and not is_locked("hr_high"):
+                lock("hr_high")
+                unlock("hr_low")
+                queue_alert(message_for("hr_high", hr=int(hr)))
+            elif hr <= HR_LOW and not is_locked("hr_low"):
+                lock("hr_low")
+                unlock("hr_high")
+                queue_alert(message_for("hr_low", hr=int(hr)))
         except:
             pass
 
-    # === 心情：普通冷却 ===
+    # === 心情：状态锁 ===
     if "mood" in eid.lower() or "心情" in eid:
-        if state in ("bad", "sad", "angry", "upset", "不好", "难过", "生气", "郁闷"):
-            if is_home and should_alert(f"mood_music_{eid}", now):
-                queue_alert("辣堡心情不好，人在家。放首轻快的歌，别追问。")
-            elif should_alert(f"mood_{eid}", now):
-                queue_alert("辣堡心情不好。别刨根问底，陪他聊两句。")
+        bad_states = {"bad", "sad", "angry", "upset", "不好", "难过", "生气", "郁闷"}
+        good_states = {"good", "happy", "fine", "ok", "好", "开心", "不错", "平静"}
+        if state in bad_states and not is_locked(f"mood_{eid}"):
+            lock(f"mood_{eid}")
+            key = "mood_bad_home" if is_home else "mood_bad"
+            queue_alert(message_for(key))
+        elif state in good_states and is_locked(f"mood_{eid}"):
+            unlock(f"mood_{eid}")
 
-    # === 位置：普通冷却 ===
+    # === 位置：状态锁 ===
     if "device_tracker" in eid.lower() or "person" in eid.lower():
         was_home = _is_home_state(old)
         now_home = _is_home_state(state)
         if old != state and was_home != now_home:
             is_home = now_home
-            if not now_home and should_alert(f"loc_out_{eid}", now):
-                queue_alert("辣堡出门了。查下天气，顺嘴提醒一句，别啰嗦。")
-            elif now_home and should_alert(f"loc_home_{eid}", now):
-                queue_alert("辣堡到家了。问一句累不累，别太热情。")
+            if not now_home and not is_locked(f"loc_out_{eid}"):
+                lock(f"loc_out_{eid}")
+                unlock(f"loc_home_{eid}")
+                queue_alert(message_for("loc_out"))
+            elif now_home and not is_locked(f"loc_home_{eid}"):
+                lock(f"loc_home_{eid}")
+                unlock(f"loc_out_{eid}")
+                queue_alert(message_for("loc_home"))
 
 if __name__ == "__main__":
     asyncio.run(main())
